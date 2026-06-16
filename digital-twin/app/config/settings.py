@@ -31,6 +31,15 @@ class Settings(BaseSettings):
     SUPABASE_URL: Optional[str] = None
     SUPABASE_ANON_KEY: Optional[str] = None
 
+    # SMTP Email Configuration
+    SMTP_HOST: Optional[str] = None
+    SMTP_PORT: int = 587
+    SMTP_USER: Optional[str] = None
+    SMTP_PASSWORD: Optional[str] = None
+    SMTP_USE_TLS: bool = True   # STARTTLS on port 587 (recommended)
+    SMTP_USE_SSL: bool = False  # Implicit SSL on port 465
+    SENDER_EMAIL: Optional[str] = None
+
     @property
 
     def database_url(self) -> str:
