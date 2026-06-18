@@ -3,7 +3,7 @@ import time
 from typing import List
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.executors.pool import ThreadPoolExecutor
-from app.services.supabase_client import get_enrolled_user_ids
+from app.services.supabase_client import get_enrolled_user_ids, _get
 from app.services.twin_orchestrator import run_digital_twin
 
 logger = logging.getLogger(__name__)
@@ -48,11 +48,72 @@ def execute_digital_twin_job() -> None:
     logger.info(f"DigitalTwinScheduler: Evaluation cron job completed in {job_duration:.2f} seconds.")
 
 
+def execute_module_deadline_job() -> None:
+    """
+    Daily job: Checks if modules have been in progress for over a week and
+    dispatches friendly check-in emails if needed.
+    """
+    from app.services.module_deadline import check_module_deadlines
+    
+    job_start = time.time()
+    logger.info("ModuleDeadlineJob: Starting daily module deadline check.")
+    
+    learners = get_enrolled_learners()
+    
+    for learner_id in learners:
+        try:
+            enrollment_rows = _get("enrollments", {
+                "select": "course_id",
+                "user_id": f"eq.{learner_id}",
+                "status": "eq.active",
+            })
+            course_ids = list({r.get("course_id") for r in enrollment_rows if r.get("course_id")})
+            
+            for course_id in course_ids:
+                check_module_deadlines(learner_id, course_id)
+        except Exception as e:
+            logger.error(f"ModuleDeadlineJob: Failed for learner {learner_id}: {e}")
+            
+    job_duration = time.time() - job_start
+    logger.info(f"ModuleDeadlineJob: Completed in {job_duration:.2f} seconds.")
+
+
+def execute_engagement_snapshot_job() -> None:
+    """
+    Daily job: Captures engagement snapshots for all enrolled learners across all courses.
+    Stores a daily record of progress, quiz performance, login activity, and engagement score.
+    """
+    from app.services.engagement_tracker import capture_engagement_snapshot
+    
+    job_start = time.time()
+    logger.info("EngagementSnapshotJob: Starting daily snapshot capture.")
+    
+    learners = get_enrolled_learners()
+    
+    for learner_id in learners:
+        try:
+            enrollment_rows = _get("enrollments", {
+                "select": "course_id",
+                "user_id": f"eq.{learner_id}",
+                "status": "eq.active",
+            })
+            course_ids = list({r.get("course_id") for r in enrollment_rows if r.get("course_id")})
+            
+            for course_id in course_ids:
+                capture_engagement_snapshot(learner_id, course_id)
+        except Exception as e:
+            logger.error(f"EngagementSnapshotJob: Failed for learner {learner_id}: {e}")
+    
+    job_duration = time.time() - job_start
+    logger.info(f"EngagementSnapshotJob: Completed in {job_duration:.2f} seconds.")
+
+
 def start_scheduler() -> None:
     """
-    Starts the scheduler process and adds the interval job.
+    Starts the scheduler process and adds all interval/cron jobs.
     """
     if not scheduler.running:
+        # Every-minute inactivity check job
         scheduler.add_job(
             execute_digital_twin_job,
             trigger='interval',
@@ -60,8 +121,32 @@ def start_scheduler() -> None:
             id='digital_twin_job',
             replace_existing=True
         )
+        
+        # Daily module deadline check (runs at 6:00 AM UTC)
+        scheduler.add_job(
+            execute_module_deadline_job,
+            trigger='cron',
+            hour=6,
+            minute=0,
+            id='module_deadline_job',
+            replace_existing=True
+        )
+        
+        # Daily engagement snapshot (runs at 7:00 AM UTC)
+        scheduler.add_job(
+            execute_engagement_snapshot_job,
+            trigger='cron',
+            hour=7,
+            minute=0,
+            id='engagement_snapshot_job',
+            replace_existing=True
+        )
+        
         scheduler.start()
-        logger.info("DigitalTwinScheduler background scheduler started successfully.")
+        logger.info(
+            "DigitalTwinScheduler started with 3 jobs: "
+            "inactivity (1min), module_deadlines (daily 6AM), engagement_snapshots (daily 7AM)"
+        )
 
 
 def shutdown_scheduler() -> None:
@@ -71,3 +156,4 @@ def shutdown_scheduler() -> None:
     if scheduler.running:
         scheduler.shutdown()
         logger.info("DigitalTwinScheduler background scheduler stopped.")
+

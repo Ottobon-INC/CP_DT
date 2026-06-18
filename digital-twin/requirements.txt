@@ -13,4 +13,3 @@ langchain-openai>=0.1.0
 langchain-google-genai>=1.0.0
 apscheduler>=3.10.0
 
-

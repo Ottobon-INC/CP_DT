@@ -655,3 +655,101 @@ def _module_status(row: Dict[str, Any]) -> str:
     if row.get("is_unlocked"):
         return "in_progress"
     return "locked"
+
+
+# ─── Login Session Functions ────────────────────────────────────────
+
+def insert_login_session(learner_id: str) -> Optional[Dict[str, Any]]:
+    """Creates a new login session record. Returns the created row."""
+    now = datetime.now(timezone.utc).isoformat()
+    session_id = str(uuid.uuid4())
+    return _post("learner_login_sessions", {
+        "session_id": session_id,
+        "learner_id": learner_id,
+        "login_at": now,
+        "created_at": now,
+    })
+
+
+def update_login_session_logout(session_id: str, duration_seconds: int) -> Optional[Dict[str, Any]]:
+    """Updates a login session with logout time and duration."""
+    now = datetime.now(timezone.utc).isoformat()
+    return _patch("learner_login_sessions", {
+        "session_id": f"eq.{session_id}",
+    }, {
+        "logout_at": now,
+        "duration_seconds": duration_seconds,
+    })
+
+
+def get_latest_login_session(learner_id: str) -> Optional[Dict[str, Any]]:
+    """Gets the most recent login session for a learner."""
+    rows = _get("learner_login_sessions", {
+        "select": "*",
+        "learner_id": f"eq.{learner_id}",
+        "order": "login_at.desc",
+        "limit": "1",
+    })
+    return rows[0] if rows else None
+
+
+def get_login_sessions(learner_id: str, limit: int = 20) -> List[Dict[str, Any]]:
+    """Gets recent login sessions for a learner."""
+    return _get("learner_login_sessions", {
+        "select": "*",
+        "learner_id": f"eq.{learner_id}",
+        "order": "login_at.desc",
+        "limit": str(limit),
+    })
+
+
+# ─── Engagement Snapshot Functions ──────────────────────────────────
+
+def insert_engagement_snapshot(record: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """Inserts (or upserts) an engagement snapshot record."""
+    return _upsert("learner_engagement_snapshots", record)
+
+
+def get_engagement_snapshots(learner_id: str, course_id: Optional[str] = None, limit: int = 30) -> List[Dict[str, Any]]:
+    """Gets historical engagement snapshots for a learner."""
+    params = {
+        "select": "*",
+        "learner_id": f"eq.{learner_id}",
+        "order": "snapshot_date.desc",
+        "limit": str(limit),
+    }
+    if course_id:
+        params["course_id"] = f"eq.{course_id}"
+    return _get("learner_engagement_snapshots", params)
+
+
+# ─── Module Deadline Functions ──────────────────────────────────────
+
+def upsert_module_deadline_state(record: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """Upsert a module deadline tracking record."""
+    return _upsert("module_deadline_state", record)
+
+
+def get_module_deadline_states(learner_id: str, course_id: Optional[str] = None) -> List[Dict[str, Any]]:
+    """Gets all module deadline states for a learner, optionally filtered by course."""
+    params = {
+        "select": "*",
+        "learner_id": f"eq.{learner_id}",
+        "order": "module_no.asc",
+    }
+    if course_id:
+        params["course_id"] = f"eq.{course_id}"
+    return _get("module_deadline_state", params)
+
+
+def get_module_deadline_state(learner_id: str, course_id: str, module_no: int) -> Optional[Dict[str, Any]]:
+    """Gets a specific module deadline state."""
+    rows = _get("module_deadline_state", {
+        "select": "*",
+        "learner_id": f"eq.{learner_id}",
+        "course_id": f"eq.{course_id}",
+        "module_no": f"eq.{module_no}",
+        "limit": "1",
+    })
+    return rows[0] if rows else None
+

@@ -89,10 +89,30 @@ def aggregate_learner_context(learner_id: str, course_id: Optional[str] = None) 
             "message_snippet": snippet
         })
 
+    # 6. Login activities
+    from app.services.login_tracking import get_login_history
+    login_info = get_login_history(learner_id)
+    login_activity = {
+        "days_since_last_login": login_info.get("days_since_last_login"),
+        "total_sessions": login_info.get("total_sessions", 0),
+        "average_session_duration_seconds": login_info.get("average_session_duration_seconds", 0)
+    }
+
+    # 7. Engagement details
+    from app.services.engagement_tracker import get_engagement_history
+    snapshots = get_engagement_history(learner_id, course_id=course_id, limit=5)
+    engagement_details = {
+        "latest_score": snapshots[0].get("engagement_score", 100.0) if snapshots else 100.0,
+        "inactivity_stage": snapshots[0].get("inactivity_stage", 0) if snapshots else 0,
+        "recent_scores": [s.get("engagement_score") for s in snapshots if s.get("engagement_score") is not None]
+    }
+
     return {
         "current_course_progress": current_course_progress,
         "active_topic": active_topic,
         "quiz_performance_summary": quiz_performance_summary,
         "learner_persona": learner_persona,
-        "recent_ai_chat_summaries": recent_ai_chat_summaries
+        "recent_ai_chat_summaries": recent_ai_chat_summaries,
+        "login_activity": login_activity,
+        "engagement_details": engagement_details
     }

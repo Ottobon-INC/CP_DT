@@ -42,7 +42,7 @@ def test_trigger_digital_twin_endpoint_success():
         assert data["status"] == "success"
         assert "executed successfully" in data["message"]
         assert data["state"] == mock_state
-        mock_run.assert_called_once_with("test_learner")
+        mock_run.assert_called_once_with("test_learner", course_id=None)
 
 def test_trigger_digital_twin_endpoint_failure():
     """

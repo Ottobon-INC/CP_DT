@@ -89,6 +89,20 @@ class ChatSummaryItem(BaseModel):
     message_snippet: str = Field(..., description="Truncated message preview (max 60 chars)")
 
 
+class LoginActivitySummary(BaseModel):
+    """Summarised login history metrics for the learner."""
+    days_since_last_login: Optional[int] = Field(None, description="Days elapsed since the learner's last login")
+    total_sessions: int = Field(0, description="Total number of recorded sessions")
+    average_session_duration_seconds: int = Field(0, description="Average duration of recorded sessions in seconds")
+
+
+class EngagementDetailsSummary(BaseModel):
+    """Point-in-time engagement snapshot metrics."""
+    latest_score: float = Field(..., description="Most recent overall engagement score (0-100)")
+    inactivity_stage: int = Field(..., description="Current inactivity tracker stage (0 to 3)")
+    recent_scores: List[float] = Field(default_factory=list, description="Recent engagement score trend values")
+
+
 class AggregatedContextResponse(BaseModel):
     """Processed and aggregated learner context derived from raw telemetry."""
     current_course_progress: CourseProgressSummary
@@ -96,6 +110,8 @@ class AggregatedContextResponse(BaseModel):
     quiz_performance_summary: QuizPerformanceSummary
     learner_persona: LearnerPersona
     recent_ai_chat_summaries: List[ChatSummaryItem] = Field(default_factory=list, description="Recent AI chat message previews")
+    login_activity: Optional[LoginActivitySummary] = None
+    engagement_details: Optional[EngagementDetailsSummary] = None
 
 
 # ─── Inactivity State Schema ───────────────────────────────────────
@@ -131,3 +147,50 @@ class LearnerDetailsResponse(BaseModel):
     learner_id: str = Field(..., description="The queried learner identifier")
     courses: List[CourseSpecificDetails] = Field(default_factory=list, description="Individually segmented details for all enrolled courses")
     inactivity_state: Optional[InactivityStateResponse] = Field(None, description="Inactivity tracking state (null if not tracked)")
+
+
+# ─── Login Session Schemas ─────────────────────────────────────────
+
+class LoginSessionItem(BaseModel):
+    """A single login session record."""
+    session_id: str = Field(..., description="Unique session identifier")
+    learner_id: str = Field(..., description="Learner who logged in")
+    login_at: datetime = Field(..., description="Login timestamp")
+    logout_at: Optional[datetime] = Field(None, description="Logout timestamp (null if still active)")
+    duration_seconds: Optional[int] = Field(None, description="Session duration in seconds")
+
+
+class LoginHistoryResponse(BaseModel):
+    """Login history with computed statistics."""
+    learner_id: str
+    days_since_last_login: Optional[int] = Field(None, description="Days since the learner's last login")
+    total_sessions: int = Field(0, description="Total number of login sessions")
+    total_duration_seconds: int = Field(0, description="Total time spent across all sessions")
+    average_session_duration_seconds: int = Field(0, description="Average session duration")
+    sessions: List[LoginSessionItem] = Field(default_factory=list, description="Recent login sessions")
+
+
+# ─── Engagement Snapshot Schemas ───────────────────────────────────
+
+class EngagementSnapshotItem(BaseModel):
+    """A single daily engagement snapshot."""
+    snapshot_date: str = Field(..., description="Date of the snapshot (YYYY-MM-DD)")
+    overall_progress_pct: float = 0
+    modules_completed: int = 0
+    total_modules: int = 0
+    days_since_last_login: Optional[int] = None
+    total_login_count: int = 0
+    avg_session_duration_seconds: int = 0
+    quiz_pass_rate: float = 0
+    avg_quiz_score: float = 0
+    total_quiz_attempts: int = 0
+    inactivity_stage: int = 0
+    engagement_score: float = Field(0, description="Computed 0–100 engagement score")
+
+
+class EngagementHistoryResponse(BaseModel):
+    """Historical engagement snapshots for a learner."""
+    learner_id: str
+    course_id: Optional[str] = None
+    snapshots: List[EngagementSnapshotItem] = Field(default_factory=list)
+

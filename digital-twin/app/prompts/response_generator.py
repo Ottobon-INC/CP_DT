@@ -9,6 +9,8 @@ Here is the student's context:
 - Quiz Performance: {quiz_performance}
 - Learner Persona: {learner_persona}
 - Recent AI chat summaries: {chat_history}
+- Login Activity: {login_activity_summary}
+- Engagement Details: {engagement_summary}
 
 The student's current engagement state is: {learner_state}
 
@@ -21,6 +23,10 @@ Instructions based on learner state:
 
 Tutor Prompting Guidance:
 {tutor_guidance}
+
+Tutor Activity Analysis Guidelines:
+- Evaluate the student's progress and consistency to determine if they are lagging/lacking momentum (e.g. low progress, high inactivity stage, low engagement score, many days since last login) or speeding up/excelling (e.g. high progress, high engagement score, good quiz performance).
+- Convey this analysis directly and encouragingly within the chat message itself, tailoring your tone based on their status. If they are lagging/lacking, check in with empathy, guide them on how to catch up, and point them to their active topic. If they are speeding up, congratulate them on their speed and consistency to keep their motivation high.
 
 Relevant Course Knowledge:
 {course_knowledge}

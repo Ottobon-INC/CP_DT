@@ -137,6 +137,25 @@ async def get_learner_details(learner_id: str, course_id: Optional[str] = None):
 
         # Aggregated / computed context (specific to this course)
         aggregated = _aggregate_from_raw(c_data)
+
+        # Fetch login activity
+        from app.services.login_tracking import get_login_history
+        login_info = get_login_history(learner_id)
+        aggregated["login_activity"] = {
+            "days_since_last_login": login_info.get("days_since_last_login"),
+            "total_sessions": login_info.get("total_sessions", 0),
+            "average_session_duration_seconds": login_info.get("average_session_duration_seconds", 0)
+        }
+
+        # Fetch engagement details
+        from app.services.engagement_tracker import get_engagement_history
+        snapshots = get_engagement_history(learner_id, course_id=course_id, limit=5)
+        aggregated["engagement_details"] = {
+            "latest_score": snapshots[0].get("engagement_score", 100.0) if snapshots else 100.0,
+            "inactivity_stage": snapshots[0].get("inactivity_stage", 0) if snapshots else 0,
+            "recent_scores": [s.get("engagement_score") for s in snapshots if s.get("engagement_score") is not None]
+        }
+
         aggregated_response = AggregatedContextResponse(**aggregated)
 
         # Build course specific details
@@ -235,3 +254,105 @@ def _aggregate_from_raw(raw_data: dict) -> dict:
         "recent_ai_chat_summaries": snippets,
     }
 
+
+# ─── Login Tracking Endpoints ──────────────────────────────────────
+
+@api_router.post(
+    "/learner/{learner_id}/login",
+    tags=["Login Tracking"],
+    summary="Record a learner login event",
+    description="Creates a new login session for the learner. Returns the session_id to be used for logout.",
+)
+async def learner_login(learner_id: str):
+    from app.services.login_tracking import record_login
+    result = record_login(learner_id)
+    if not result:
+        raise HTTPException(status_code=500, detail="Failed to record login session")
+    return {"status": "login_recorded", "session_id": result.get("session_id"), "login_at": result.get("login_at")}
+
+
+@api_router.post(
+    "/learner/{learner_id}/logout",
+    tags=["Login Tracking"],
+    summary="Record a learner logout event",
+    description="Records the logout time and calculates session duration for the given session_id.",
+)
+async def learner_logout(learner_id: str, session_id: str):
+    from app.services.login_tracking import record_logout
+    result = record_logout(learner_id, session_id)
+    if not result:
+        raise HTTPException(status_code=404, detail="Session not found or already logged out")
+    return {"status": "logout_recorded", "session_id": session_id, "duration_seconds": result.get("duration_seconds")}
+
+
+@api_router.get(
+    "/learner/{learner_id}/login-history",
+    tags=["Login Tracking"],
+    summary="Get learner login history",
+    description="Returns the learner's login sessions with statistics including days since last login and average session duration.",
+)
+async def get_learner_login_history(learner_id: str, limit: int = 20):
+    from app.services.login_tracking import get_login_history
+    return get_login_history(learner_id, limit=limit)
+
+
+# ─── Module Deadline Endpoints ─────────────────────────────────────
+
+@api_router.get(
+    "/learner/{learner_id}/module-deadlines",
+    tags=["Module Deadlines"],
+    summary="Get module deadline states",
+    description="Returns all module deadline tracking states for a learner, optionally filtered by course_id.",
+)
+async def get_module_deadlines(learner_id: str, course_id: Optional[str] = None):
+    from app.services.supabase_client import get_module_deadline_states
+    all_states = get_module_deadline_states(learner_id, course_id)
+    return {
+        "learner_id": learner_id,
+        "course_id": course_id,
+        "modules": all_states,
+    }
+
+
+@api_router.post(
+    "/learner/{learner_id}/module-deadlines/check",
+    tags=["Module Deadlines"],
+    summary="Trigger module deadline check",
+    description="Manually triggers the module deadline check for a learner and course. Sends friendly check-in emails if modules are overdue (>1 week).",
+)
+async def trigger_module_deadline_check(learner_id: str, course_id: str):
+    from app.services.module_deadline import check_module_deadlines
+    result = check_module_deadlines(learner_id, course_id)
+    return result
+
+
+# ─── Engagement History Endpoints ──────────────────────────────────
+
+@api_router.get(
+    "/learner/{learner_id}/engagement-history",
+    tags=["Engagement"],
+    summary="Get engagement snapshot history",
+    description="Returns historical daily engagement snapshots for a learner, showing trends in progress, quiz performance, login activity, and overall engagement score.",
+)
+async def get_engagement_history(learner_id: str, course_id: Optional[str] = None, limit: int = 30):
+    from app.services.engagement_tracker import get_engagement_history
+    snapshots = get_engagement_history(learner_id, course_id=course_id, limit=limit)
+    return {
+        "learner_id": learner_id,
+        "course_id": course_id,
+        "snapshots": snapshots,
+    }
+
+
+@api_router.post(
+    "/learner/{learner_id}/engagement-snapshot",
+    tags=["Engagement"],
+    summary="Capture engagement snapshot now",
+    description="Manually triggers an engagement snapshot capture for the learner and course. Normally runs automatically once per day.",
+)
+async def trigger_engagement_snapshot(learner_id: str, course_id: str):
+    from app.services.engagement_tracker import capture_engagement_snapshot
+    result = capture_engagement_snapshot(learner_id, course_id)
+    if not result:
+        raise HTTPException(status_code=500, detail="Failed to capture engagement snapshot")
+    return {"status": "snapshot_captured", "data": result}

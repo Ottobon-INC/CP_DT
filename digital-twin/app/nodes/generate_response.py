@@ -31,6 +31,26 @@ def generate_response(state: TwinState) -> Dict[str, Any]:
     
     chat_history_list = learner_context.get("recent_ai_chat_summaries") or []
     chat_history = "\n".join([f"- {m.get('role')}: {m.get('message_snippet')}" for m in chat_history_list]) or "No recent chat history."
+
+    # Format login activity summary
+    login_info = learner_context.get("login_activity") or {}
+    days_since_last = login_info.get("days_since_last_login")
+    days_str = f"{days_since_last} days ago" if days_since_last is not None else "never logged in before"
+    avg_dur = login_info.get("average_session_duration_seconds", 0)
+    login_activity_summary = (
+        f"Last logged in: {days_str}. "
+        f"Total login sessions: {login_info.get('total_sessions', 0)}. "
+        f"Average session duration: {avg_dur // 60}m {avg_dur % 60}s."
+    )
+
+    # Format engagement details summary
+    engagement_info = learner_context.get("engagement_details") or {}
+    recent_scores = ", ".join([str(s) for s in engagement_info.get("recent_scores", [])]) or "None"
+    engagement_summary = (
+        f"Current Engagement Score (0-100): {engagement_info.get('latest_score', 100.0)}. "
+        f"Inactivity Stage: {engagement_info.get('inactivity_stage', 0)}/3. "
+        f"Recent engagement score history: [{recent_scores}]."
+    )
     
     guidance_list = tutor_context.get("tutor_prompt_guidance") or []
     tutor_guidance = "\n".join([f"- {g.get('topic_id')}: {g.get('guidance')}" for g in guidance_list]) or "No specific guidance suggestions."
@@ -48,6 +68,8 @@ def generate_response(state: TwinState) -> Dict[str, Any]:
         quiz_performance=quiz_performance,
         learner_persona=learner_persona,
         chat_history=chat_history,
+        login_activity_summary=login_activity_summary,
+        engagement_summary=engagement_summary,
         learner_state=learner_state,
         tutor_guidance=tutor_guidance,
         course_knowledge=course_knowledge
